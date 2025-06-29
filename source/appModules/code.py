@@ -1,14 +1,14 @@
 # A part of NonVisual Desktop Access (NVDA)
-# Copyright (C) 2020-2024 NV Access Limited, Leonard de Ruijter, Cary-Rowen
+# Copyright (C) 2020-2025 NV Access Limited, Leonard de Ruijter, Cary-Rowen
 # This file is covered by the GNU General Public License.
 # See the file COPYING for more details.
 
 """App module for Visual Studio Code."""
 
 import appModuleHandler
-import controlTypes
+from NVDAObjects.behaviors import EditableTextBase
 from NVDAObjects.IAccessible.chromium import Document
-from NVDAObjects import NVDAObject, NVDAObjectTextInfo
+from NVDAObjects import NVDAObject
 
 
 class VSCodeDocument(Document):
@@ -26,8 +26,5 @@ class AppModule(appModuleHandler.AppModule):
 			clsList.insert(0, VSCodeDocument)
 
 	def event_NVDAObject_init(self, obj: NVDAObject):
-		# TODO: This is a specific fix for Visual Studio Code.
-		# Once the underlying issue is resolved, this workaround can be removed.
-		# See issue #15159 for more details.
-		if obj.role != controlTypes.Role.EDITABLETEXT and controlTypes.State.EDITABLE not in obj.states:
-			obj.TextInfo = NVDAObjectTextInfo
+		if isinstance(obj, EditableTextBase):
+			obj._supportsSentenceNavigation = False

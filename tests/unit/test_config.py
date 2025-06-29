@@ -1,7 +1,7 @@
 # A part of NonVisual Desktop Access (NVDA)
 # This file is covered by the GNU General Public License.
 # See the file COPYING for more details.
-# Copyright (C) 2022-2024 NV Access Limited, Cyrille Bougot, Leonard de Ruijter
+# Copyright (C) 2022-2025 NV Access Limited, Cyrille Bougot, Leonard de Ruijter
 
 from collections.abc import Callable, Generator
 import enum
@@ -35,6 +35,7 @@ from config.profileUpgradeSteps import (
 	upgradeConfigFrom_13_to_14,
 	upgradeConfigFrom_9_to_10,
 	upgradeConfigFrom_11_to_12,
+	upgradeConfigFrom_16_to_17,
 )
 from config.configFlags import (
 	NVDAKey,
@@ -47,7 +48,7 @@ from config.configFlags import (
 from utils.displayString import (
 	DisplayStringEnum,
 )
-from utils.mmdevice import _AudioOutputDevice
+from utils.mmdevice import AudioOutputDevice
 
 
 class Config_FeatureFlagEnums_getAvailableEnums(unittest.TestCase):
@@ -918,15 +919,15 @@ class Config_AggregatedSection_pollution(unittest.TestCase):
 		self.assertEqual(self.profile, {"someBool": False})
 
 
-_DevicesT: typing.TypeAlias = dict[DEVICE_STATE, list[_AudioOutputDevice]]
+_DevicesT: typing.TypeAlias = dict[DEVICE_STATE, list[AudioOutputDevice]]
 
 
 def getOutputDevicesFactory(
 	devices: _DevicesT,
-) -> Callable[[DEVICE_STATE], Generator[_AudioOutputDevice]]:
-	"""Create a callable that can be used to patch utils.mmdevice._getOutputDevices."""
+) -> Callable[[DEVICE_STATE], Generator[AudioOutputDevice]]:
+	"""Create a callable that can be used to patch utils.mmdevice.getOutputDevices."""
 
-	def getOutputDevices(stateMask: DEVICE_STATE, **kw) -> Generator[_AudioOutputDevice]:
+	def getOutputDevices(stateMask: DEVICE_STATE, **kw) -> Generator[AudioOutputDevice]:
 		yield from devices.get(stateMask, [])
 
 	return getOutputDevices
@@ -934,10 +935,10 @@ def getOutputDevicesFactory(
 
 class Config_ProfileUpgradeSteps_FriendlyNameToEndpointId(unittest.TestCase):
 	DEFAULT_DEVICES: _DevicesT = {
-		DEVICE_STATE.ACTIVE: [_AudioOutputDevice("id1", "Device 1")],
-		DEVICE_STATE.UNPLUGGED: [_AudioOutputDevice("id2", "Device 2")],
-		DEVICE_STATE.DISABLED: [_AudioOutputDevice("id3", "Device 3")],
-		DEVICE_STATE.NOTPRESENT: [_AudioOutputDevice("id4", "Device 4")],
+		DEVICE_STATE.ACTIVE: [AudioOutputDevice("id1", "Device 1")],
+		DEVICE_STATE.UNPLUGGED: [AudioOutputDevice("id2", "Device 2")],
+		DEVICE_STATE.DISABLED: [AudioOutputDevice("id3", "Device 3")],
+		DEVICE_STATE.NOTPRESENT: [AudioOutputDevice("id4", "Device 4")],
 	}
 
 	def test_noDuplicates(self):
@@ -952,10 +953,10 @@ class Config_ProfileUpgradeSteps_FriendlyNameToEndpointId(unittest.TestCase):
 		"""Test that, when there are devices with duplicate names in different states, the one with the preferred state is returned."""
 		FRIENDLY_NAME = "Device friendly name"
 		devices: _DevicesT = {
-			DEVICE_STATE.ACTIVE: [_AudioOutputDevice("idA", FRIENDLY_NAME)],
-			DEVICE_STATE.DISABLED: [_AudioOutputDevice("idD", FRIENDLY_NAME)],
-			DEVICE_STATE.NOTPRESENT: [_AudioOutputDevice("idN", FRIENDLY_NAME)],
-			DEVICE_STATE.UNPLUGGED: [_AudioOutputDevice("idU", FRIENDLY_NAME)],
+			DEVICE_STATE.ACTIVE: [AudioOutputDevice("idA", FRIENDLY_NAME)],
+			DEVICE_STATE.DISABLED: [AudioOutputDevice("idD", FRIENDLY_NAME)],
+			DEVICE_STATE.NOTPRESENT: [AudioOutputDevice("idN", FRIENDLY_NAME)],
+			DEVICE_STATE.UNPLUGGED: [AudioOutputDevice("idU", FRIENDLY_NAME)],
 		}
 		with self.subTest("Friendly name is active"):
 			self.performTest(*devices[DEVICE_STATE.ACTIVE][0], devices)
@@ -981,11 +982,11 @@ class Config_ProfileUpgradeSteps_FriendlyNameToEndpointId(unittest.TestCase):
 		self.performTest(friendlyName="Anything", expectedId=None, devices=devices)
 
 	def performTest(self, expectedId: str | None, friendlyName: str, devices: _DevicesT):
-		"""Patch utils.mmdevice._getOutputDevices to return what we tell it, then test that friendlyNameToEndpointId returns the correct ID given a friendly name.
+		"""Patch utils.mmdevice.getOutputDevices to return what we tell it, then test that friendlyNameToEndpointId returns the correct ID given a friendly name.
 		The odd order of arguments is so you can directly unpack an AudioOutputDevice.
 		"""
 		with patch(
-			"utils.mmdevice._getOutputDevices",
+			"utils.mmdevice.getOutputDevices",
 			autospec=True,
 			side_effect=getOutputDevicesFactory(devices),
 		):
@@ -995,10 +996,10 @@ class Config_ProfileUpgradeSteps_FriendlyNameToEndpointId(unittest.TestCase):
 class Config_upgradeProfileSteps_upgradeProfileFrom_13_to_14(unittest.TestCase):
 	def setUp(self):
 		devices: _DevicesT = {
-			DEVICE_STATE.ACTIVE: [_AudioOutputDevice("id", "Friendly name")],
+			DEVICE_STATE.ACTIVE: [AudioOutputDevice("id", "Friendly name")],
 		}
 		self._getOutputDevicesPatcher = patch(
-			"utils.mmdevice._getOutputDevices",
+			"utils.mmdevice.getOutputDevices",
 			autospec=True,
 			side_effect=getOutputDevicesFactory(devices),
 		)
@@ -1043,3 +1044,49 @@ class Config_upgradeProfileSteps_upgradeProfileFrom_13_to_14(unittest.TestCase):
 			profile["speech"]["outputDevice"]
 		with self.assertRaises(KeyError):
 			profile["audio"]["outputDevice"]
+
+
+class Config_upgradeProfileSteps_upgradeProfileFrom_16_to_17(unittest.TestCase):
+	def test_rename(self):
+		v15Config = """
+[remote]
+	[[connections]]
+		last_connected = nvdaremote:6837, 192.168.0.123:456
+	[[controlserver]]
+		autoconnect = True
+		self_hosted = True
+		connection_type = 0
+		host = remote.example.com:1234
+		port = 31415
+		key = superSecurePassw0rd
+	[[seen_motds]]
+		nvdaremote.com:6837=7B502C3A1F48C8609AE212CDFB639DEE39673F5E
+	[[trusted_certs]]
+		sketchyServer.example.com:6837 = 64EC88CA00B268E5BA1A35678A1B5316D212F4F366B2477232534A8AECA37F3C
+"""
+		expectedV16Config = {
+			"remote": {
+				"connections": {
+					"lastConnected": ["nvdaremote:6837", "192.168.0.123:456"],
+				},
+				"controlServer": {
+					"autoconnect": "True",
+					"selfHosted": "True",
+					"connectionMode": "0",
+					"host": "remote.example.com:1234",
+					"port": "31415",
+					"key": "superSecurePassw0rd",
+				},
+				"seenMOTDs": {
+					"nvdaremote.com:6837": "7B502C3A1F48C8609AE212CDFB639DEE39673F5E",
+				},
+				"trustedCertificates": {
+					"sketchyServer.example.com:6837": "64EC88CA00B268E5BA1A35678A1B5316D212F4F366B2477232534A8AECA37F3C",
+				},
+			},
+		}
+		conf = configobj.ConfigObj(io.StringIO(v15Config))
+		upgradeConfigFrom_16_to_17(conf)
+		actualV16Config = conf.dict()
+		self.maxDiff = None
+		self.assertEqual(expectedV16Config, actualV16Config)

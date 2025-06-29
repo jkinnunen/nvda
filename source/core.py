@@ -1,5 +1,5 @@
 # A part of NonVisual Desktop Access (NVDA)
-# Copyright (C) 2006-2024 NV Access Limited, Aleksey Sadovoy, Christopher Toth, Joseph Lee, Peter Vágner,
+# Copyright (C) 2006-2025 NV Access Limited, Aleksey Sadovoy, Christopher Toth, Joseph Lee, Peter Vágner,
 # Derek Riemer, Babbage B.V., Zahari Yurukov, Łukasz Golonka, Cyrille Bougot, Julien Cochuyt
 # This file is covered by the GNU General Public License.
 # See the file COPYING for more details.
@@ -337,7 +337,7 @@ def resetConfiguration(factoryDefaults=False):
 	log.debug("terminating tones")
 	tones.terminate()
 	log.debug("terminating sound split")
-	audio.terminate()
+	audio.soundSplit.terminate()
 	log.debug("Terminating background braille display detection")
 	bdDetect.terminate()
 	log.debug("Terminating background i/o")
@@ -369,8 +369,8 @@ def resetConfiguration(factoryDefaults=False):
 	# Tones
 	tones.initialize()
 	# Sound split
-	log.debug("initializing audio")
-	audio.initialize()
+	log.debug("initializing sound split")
+	audio.soundSplit.initialize()
 	# Character processing
 	log.debug("initializing character processing")
 	characterProcessing.initialize()
@@ -548,6 +548,7 @@ def _handleNVDAModuleCleanupBeforeGUIExit():
 	import brailleViewer
 	import globalPluginHandler
 	import watchdog
+	import _remoteClient
 
 	try:
 		import updateCheck
@@ -563,6 +564,8 @@ def _handleNVDAModuleCleanupBeforeGUIExit():
 	_terminate(globalPluginHandler)
 	# the brailleViewer should be destroyed safely before closing the window
 	brailleViewer.destroyBrailleViewer()
+	# Terminating remoteClient causes it to clean up its menus, so do it here while they still exist
+	_terminate(_remoteClient)
 
 
 def _initializeObjectCaches():
@@ -765,7 +768,7 @@ def main():
 	log.debug("Initializing sound split")
 	import audio
 
-	audio.initialize()
+	audio.soundSplit.initialize()
 	import speechDictHandler
 
 	log.debug("Speech Dictionary processing")
@@ -897,6 +900,11 @@ def main():
 
 	log.debug("Initializing global plugin handler")
 	globalPluginHandler.initialize()
+
+	import _remoteClient
+
+	_remoteClient.initialize()
+
 	if globalVars.appArgs.install or globalVars.appArgs.installSilent:
 		import gui.installerGui
 
